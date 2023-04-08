@@ -1,0 +1,57 @@
+import logging
+import random
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types import ParseMode
+from aiogram.utils import executor
+
+logging.basicConfig(level=logging.INFO)
+
+API_TOKEN = '{{ bot_token }}'
+
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
+
+{% for state, actions in states.items() %}
+{% for action in actions['actions'] %}
+{% if action['type'] == 'send_message' %}
+async def {{ state }}_send_message(message: types.Message):
+    await message.reply("{{ action['text'] }}", parse_mode=ParseMode.HTML)
+{% endif %}
+
+{% if action['type'] == 'show_keyboard' %}
+async def {{ state }}_show_keyboard(message: types.Message):
+    keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
+    {% for option in action['options'] %}
+    button = types.KeyboardButton("{{ option['text'] }}")
+    keyboard_markup.add(button)
+    {% endfor %}
+    await message.reply("Choose an option:", reply_markup=keyboard_markup)
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+# Register message handlers
+{% for state, actions in states.items() %}
+@dp.message_handler(commands=['{{ state.lower() }}'])
+async def {{ state.lower() }}_command_handler(message: types.Message):
+    {% for action in actions['actions'] %}
+    await {{ state }}_{{ action['type'] }}(message)
+    {% endfor %}
+{% endfor %}
+
+async def on_start(dp):
+    await bot.send_message(chat_id=config.ADMIN_ID, text='Bot has been started')
+
+async def on_shutdown(dp):
+    await bot.send_message(chat_id=config.ADMIN_ID, text='Bot has been stopped')
+
+    await dp.storage.close()
+    await dp.storage.wait_closed()
+
+    await bot.session.close()
+
+if __name__ == '__main__':
+    from aiogram import executor
+    executor.start_polling(dp, on_startup=on_start, on_shutdown=on_shutdown)
